@@ -1,0 +1,264 @@
+From 082e1b1b07be7af65863158c9f35d6a7fc14641f Mon Sep 17 00:00:00 2001
+From: Jianpeng Ma <majianpeng@gmail.com>
+Date: Fri, 26 Apr 2013 16:11:30 +0800
+Subject: [PATCH] Clean up code.
+
+
+Signed-off-by: Jianpeng Ma <majianpeng@gmail.com>
+---
+ vbfs_format.c | 147 ++++++++++++++--------------------------------------------
+ vbfs_format.h |   8 ++--
+ 2 files changed, 39 insertions(+), 116 deletions(-)
+
+diff --git a/vbfs_format.c b/vbfs_format.c
+index 49c6571..170d5ce 100644
+--- a/vbfs_format.c
++++ b/vbfs_format.c
+@@ -11,6 +11,7 @@
+ #include <uuid/uuid.h>
+ #include <sys/ioctl.h>
+ #include <sys/mount.h>
++#include <assert.h>
+ 
+ #include "vbfs_format.h"
+ 
+@@ -277,64 +278,25 @@ static int vbfs_prepare_superblock()
+ 	return 0;
+ }
+ 
+-static int vbfs_inode_meta_prepare(__u32 groupno, char *inode_meta_buf, __u32 free_inodes)
++static void vbfs_inode_meta_prepare(__u32 groupno, char *inode_meta_buf, __u32 free_inodes)
+ {
+-	struct inode_bitmap_group inode_meta;
+-	__u32 bitmap_size;
+-	__u32 total_inode;
+-	__u64 start_offset;
+-
+-	/* last bitmap info is wrong, will fix it later */
+-	memset(inode_meta_buf, 0, INODE_BITMAP_META_SIZE);
+-	bitmap_size = vbfs_params.extend_size_kb * 1024 - INODE_BITMAP_META_SIZE;
+-	total_inode = bitmap_size * 8;
+-	inode_meta.total_inode = cpu_to_le32(total_inode);
+-	inode_meta.group_no = cpu_to_le32(groupno);
+-
+-	start_offset = (le32_to_cpu(vbfs_superblk.extend_bitmap_offset)
+-			+ le32_to_cpu(vbfs_superblk.extend_bitmap_count))
+-			* vbfs_params.extend_size_kb * 1024
+-			+ (__u64)total_inode * groupno * INODE_BITMAP_META_SIZE;
+-	inode_meta.inode_start_offset = cpu_to_le64(start_offset);
+-	printf("group %d inode bitmap, first inode start at %llu Bytes\n",
+-				groupno, start_offset);
+-
+-	inode_meta.free_inode = cpu_to_le32(free_inodes);
+-	inode_meta.current_position = cpu_to_le32(0);
++	struct inode_bitmap_group *inode_meta = (struct inode_bitmap_group *)inode_meta_buf;
++	assert(free_inodes != 0);
+ 
+-	memcpy(inode_meta_buf, &inode_meta, sizeof(inode_meta));
++	inode_meta->total_inode = inode_meta->free_inode = cpu_to_le32(free_inodes);
++	inode_meta->group_no = cpu_to_le32(groupno);
++	inode_meta->current_position = cpu_to_le32(0);
+ 
+-	return 0;
+ }
+ 
+-static int vbfs_extend_meta_prepare(__u32 groupno, __u32 inode_extend_count,
+-				char *extend_meta_buf, __u32 free_extends)
++static int vbfs_extend_meta_prepare(__u32 groupno, char *extend_meta_buf, __u32 free_extends)
+ {
+-	struct extend_bitmap_group extend_meta;
+-	__u32 bitmap_size;
+-	__u32 total_extend;
+-	__u64 start_offset;
+-
+-	/* last bitmap info is wrong, will fix it later */
+-	memset(extend_meta_buf, 0, EXTEND_BITMAP_META_SIZE);
+-	bitmap_size = vbfs_params.extend_size_kb * 1024 - EXTEND_BITMAP_META_SIZE;
+-	total_extend = bitmap_size * 8;
+-	extend_meta.total_extend = cpu_to_le32(total_extend);
+-	extend_meta.group_no = cpu_to_le32(groupno);
+-
+-	start_offset = (__u64)(le32_to_cpu(vbfs_superblk.extend_bitmap_offset)
+-			+ le32_to_cpu(vbfs_superblk.extend_bitmap_count)
+-			+ inode_extend_count) * vbfs_params.extend_size_kb
+-			* 1024 + (__u64)total_extend
+-			* groupno * (vbfs_params.extend_size_kb * 1024);
+-	extend_meta.extend_start_offset = cpu_to_le64(start_offset);
+-	printf("group %d extend bitmap, first extend start at %llu Bytes\n",
+-				groupno, start_offset);
+-
+-	extend_meta.extend_start_offset = cpu_to_le64(start_offset);
+-	extend_meta.free_extend = cpu_to_le32(free_extends);
+-	extend_meta.current_position = cpu_to_le32(0);
+-	memcpy(extend_meta_buf, &extend_meta, sizeof(extend_meta));
++	struct extend_bitmap_group * extend_meta  = (struct extend_bitmap_group *)extend_meta_buf;
++	assert(free_extends != 0);
++
++	extend_meta->total_extend = extend_meta->free_extend = cpu_to_le32(free_extends);
++	extend_meta->group_no = cpu_to_le32(groupno);
++	extend_meta->current_position = cpu_to_le32(0);
+ 
+ 	return 0;
+ }
+@@ -420,7 +382,7 @@ static __u32 alloc_extend(int *ret, __u64 *extend_offset)
+ 		}
+ 		m ++;
+ 	}
+-	*extend_offset = le64_to_cpu(extend_meta.extend_start_offset) + (__u64)extend_no * extend_size;
++	*extend_offset = (__u64)extend_no * extend_size;
+ 
+ 	/* write bitmap */
+ 	memcpy(buf, &extend_meta, sizeof(struct extend_bitmap_group));
+@@ -598,7 +560,7 @@ static int alloc_inode()
+ 	}
+ 
+ 	/* write inode */
+-	offset = (__u64)inode_off_t * INODE_SIZE + le64_to_cpu(inode_meta.inode_start_offset);
++	offset = (__u64)inode_off_t * INODE_SIZE;
+ 	if (lseek64(fd, offset, SEEK_SET) < 0) {
+ 		fprintf(stderr, "lseek error\n");
+ 		goto err;
+@@ -642,11 +604,9 @@ static int write_to_disk()
+ 	int extend_size = vbfs_params.extend_size_kb * 1024;
+ 	ssize_t ret = 0;
+ 	off64_t offset = 0;
+-	int fd, i, j;
++	int fd, i;
+ 	__u32 bad_extend_cnt, inode_bitmap_cnt, extend_bitmap_cnt, inode_extend_count;
+-	__u32 unused_inodes, free_extends, bitmap_capacity;
+-	__u32 tmp1, tmp2;
+-	__u8 tmp_val = 0;
++	__u32 total_inodes, total_extends, bitmap_capacity;
+ 
+ 	fd = vbfs_params.fd;
+ 	buf = valloc(extend_size);
+@@ -686,78 +646,43 @@ static int write_to_disk()
+ 				* INODE_SIZE / (vbfs_params.extend_size_kb * 1024);
+ 	}
+ 	printf("inode used %u extend\n", inode_extend_count);
+-	/* unused inode number */
+-	unused_inodes = inode_extend_count * vbfs_params.extend_size_kb * 1024 / INODE_SIZE;
++
++
++	/* count total inode and write inode bitmap*/
++	total_inodes = inode_extend_count * vbfs_params.extend_size_kb * 1024 / INODE_SIZE;
+ 	bitmap_capacity = (vbfs_params.extend_size_kb * 1024 - INODE_BITMAP_META_SIZE) * 8;
+-	printf("%u unused_inodes, bitmap capacity %u\n", unused_inodes, bitmap_capacity);
++	printf("%u total_inodes, bitmap capacity %u\n", total_inodes, bitmap_capacity);
+ 	for (i = 0; i < inode_bitmap_cnt; i++) {
+ 		memset(buf, 0, extend_size);
+-		memset(inode_meta_buf, 0, INODE_BITMAP_META_SIZE);
+-		if (unused_inodes < bitmap_capacity) {
+-			tmp1 = (bitmap_capacity - unused_inodes) % 8;
+-			tmp2 = (bitmap_capacity - unused_inodes) / 8;
+-			//printf("bitmap_capacity is %u, tmp1 is %u, tmp2 is %u\n", bitmap_capacity, tmp1, tmp2);
+-			if (tmp1) {
+-				memset(buf + extend_size - tmp2, 0xFF, tmp2);
+-				for (j = 0; j < tmp1; j ++) {
+-					tmp_val = tmp_val & (1 << (7 - j));
+-				}
+-				buf[extend_size - tmp2 - 1] = tmp_val;
+-			} else {
+-				memset(buf + extend_size - tmp2, 0xFF, tmp2);
+-			}
+-			printf("last bitmap free_inode is %u\n", unused_inodes);
+-			vbfs_inode_meta_prepare(i, inode_meta_buf, unused_inodes);
+-			unused_inodes = 0;
++		if (total_inodes < bitmap_capacity) {
++			printf("last inode-bitmap contain free_inode is %u\n", total_inodes);
++			vbfs_inode_meta_prepare(i, buf, total_inodes);
++			total_inodes = 0;
+ 		} else {
+-			unused_inodes -= bitmap_capacity;
+-			vbfs_inode_meta_prepare(i, inode_meta_buf, bitmap_capacity);
++			total_inodes -= bitmap_capacity;
++			vbfs_inode_meta_prepare(i, buf, bitmap_capacity);
+ 		}
+-		memcpy(buf, inode_meta_buf, INODE_BITMAP_META_SIZE);
+ 		if (write_wapper(fd, buf, extend_size))
+ 			goto err;
+ 	}
+ 
+ 	/* write extend bitmap */
+-	extend_meta_buf = malloc(EXTEND_BITMAP_META_SIZE);
+-	if (NULL == extend_meta_buf) {
+-		fprintf(stderr, "valloc error\n");
+-		goto err;
+-	}
+ 	extend_bitmap_cnt = le32_to_cpu(vbfs_superblk.extend_bitmap_count);
+ 	/* free extend number */
+-	free_extends = le32_to_cpu(vbfs_superblk.s_extend_count)
++	total_extends = le32_to_cpu(vbfs_superblk.s_extend_count)
+ 				- bad_extend_cnt - inode_bitmap_cnt
+ 				- extend_bitmap_cnt - inode_extend_count;
+ 	bitmap_capacity = (vbfs_params.extend_size_kb * 1024 - EXTEND_BITMAP_META_SIZE) * 8;
+-	printf("%u free_extends\n", free_extends);
++	printf("total data extends %u\n", total_extends);
+ 	for (i = 0; i < extend_bitmap_cnt; i++) {
+ 		memset(buf, 0, extend_size);
+-		memset(extend_meta_buf, 0, EXTEND_BITMAP_META_SIZE);
+-		if (free_extends < bitmap_capacity) {
+-			tmp1 = (bitmap_capacity - free_extends) % 8;
+-			tmp2 = (bitmap_capacity - free_extends) / 8;
+-			//printf("tmp1 %u, tmp2 %u\n", tmp1, tmp2);
+-			if (tmp1) {
+-				memset(buf + extend_size - tmp2, 0xFF, tmp2);
+-				for (j = 0; j < tmp1; j ++) {
+-					tmp_val = tmp_val | (1 << (7 - j));
+-				}
+-				buf[extend_size - tmp2 - 1] = tmp_val;
+-				//printf("%u, tmp_val %hhx\n", tmp2, tmp_val);
+-			} else {
+-				memset(buf + extend_size - tmp2, 0xFF, tmp2);
+-			}
+-			printf("last bitmap free_extend is %u\n", free_extends);
+-			vbfs_extend_meta_prepare(i, inode_extend_count,
+-						extend_meta_buf, free_extends);
+-			free_extends = 0;
++		if (total_extends < bitmap_capacity) {
++			vbfs_extend_meta_prepare(i, buf, total_extends);
++			total_extends = 0;
+ 		} else {
+-			free_extends -= bitmap_capacity;
+-			vbfs_extend_meta_prepare(i, inode_extend_count,
+-						extend_meta_buf, bitmap_capacity);
++			total_extends -= bitmap_capacity;
++			vbfs_extend_meta_prepare(i, buf, bitmap_capacity);
+ 		}
+-		memcpy(buf, extend_meta_buf, EXTEND_BITMAP_META_SIZE);
+ 		if (write_wapper(fd, buf, extend_size))
+ 			goto err;
+ 	}
+diff --git a/vbfs_format.h b/vbfs_format.h
+index 09e8cc5..9f10297 100644
+--- a/vbfs_format.h
++++ b/vbfs_format.h
+@@ -102,20 +102,18 @@ struct inode_bitmap_group {
+ 	__le32 total_inode;
+ 	__le32 free_inode;
+ 	__le32 current_position;
+-	__le64 inode_start_offset;
+-} __attribute__((packed));
++};
+ 
+ struct extend_bitmap_group {
+ 	__le32 group_no;
+ 	__le32 total_extend;
+ 	__le32 free_extend;
+ 	__le32 current_position;
+-	__le64 extend_start_offset;
+-} __attribute__((packed));
++};
+ 
+ struct vbfs_inode {
+ 	__le32 i_ino;
+-	__le32 i_pino; /* what's this */
++	__le32 i_pino; /* parent ino */
+ 	__le32 i_mode;
+ 	__le64 i_size;
+ 	__le32 i_atime;
+-- 
+1.8.2.rc2.4.g7799588
+
+
+

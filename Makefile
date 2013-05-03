@@ -7,10 +7,10 @@ FORMAT_OBJS = $(FORMAT_SOURCE:.c=.o)
 DUMPFS_OBJS = $(DUMPFS_SOURCE:.c=.o)
 
 vbfs_format: $(FORMAT_OBJS)
-	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(FORMAT_OBJS)
+	$(CC) $(CFLAGS) -o $@ $(FORMAT_OBJS) $(LDFLAGS)
 
 vbfs_dump: $(DUMPFS_OBJS)
-	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(DUMPFS_OBJS)
+	$(CC) $(CFLAGS)  -o $@ $(DUMPFS_OBJS)
 
 all: vbfs_format vbfs_dump
 

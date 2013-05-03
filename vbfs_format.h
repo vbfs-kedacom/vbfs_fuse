@@ -22,8 +22,10 @@
 #endif
 
 #define VBFS_SUPER_MAGIC 0xABCDEF01
+
+#define VBFS_SUPER_SIZE 4096
 #define VBFS_SUPER_OFFSET 4096
-#define INODE_SIZE 4096
+#define INODE_SIZE 128
 #define EXTEND_BITMAP_META_SIZE 1024
 #define INODE_BITMAP_META_SIZE 1024
 #define DIR_META_SIZE 1024
@@ -92,36 +94,36 @@ struct vbfs_superblock {
 	__le32 s_mount_time; /* the time of last mount */
 	__le32 s_state; /* clean or unclean */
 	__u8 uuid[16];
-	__u8 reverse[4];
-} __attribute__((packed));
+	__u8 reversed[4012];/*If you removed or add field,you should also modify this*/
+};
 
 struct inode_bitmap_group {
 	__le32 group_no;
 	__le32 total_inode;
 	__le32 free_inode;
 	__le32 current_position;
-	__le64 inode_start_offset;
-} __attribute__((packed));
+};
 
 struct extend_bitmap_group {
 	__le32 group_no;
 	__le32 total_extend;
 	__le32 free_extend;
 	__le32 current_position;
-	__le64 extend_start_offset;
-} __attribute__((packed));
+};
 
 struct vbfs_inode {
 	__le32 i_ino;
-	__le32 i_pino; /* what's this */
-	__le16 i_mode;
+	__le32 i_pino; /* parent ino */
+	__le32 i_mode;
 	__le64 i_size;
 	__le32 i_atime;
 	__le32 i_ctime;
 	__le32 i_mtime;
 
 	__le32 i_extends;
-} __attribute__((packed));
+
+	__u8   reserverd[88];
+};
 
 enum {
 	VBFS_FT_UNKOWN,
